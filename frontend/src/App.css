@@ -1,0 +1,51 @@
+.chk_input{
+    display:none;
+}
+.chk_label{
+}
+
+
+
+/* モーダルダイアログの装飾 */
+
+
+
+.modal_area{
+    position:fixed;
+    top:0;
+    left:0;
+    width:100vw;
+    height:100vh;
+}
+
+.modal_bg_area{
+    position:absolute;
+
+    top:0;
+    left:0;
+
+    width:100vw;
+    height:100vh;
+
+    background:rgba(0,0,0, 0.5);
+}
+.modal_content_area{
+
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%, -50%);
+
+    background: bisque;
+    padding:2rem;
+
+    z-index:100;
+
+    border-radius:1rem;
+}
+
+
+
+
+
+
