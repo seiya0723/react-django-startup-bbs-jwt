@@ -1,41 +1,40 @@
-import React, { Component } from "react";
+import React, { useEffect, useState } from 'react';
 
 import Modal from "./components/Modal";
 import axios from "axios";
 
-import jwt_decode from 'jwt-decode';
+const App = () => {
 
-
-
-
-class App extends Component {
+    const [topicList , setTopicList]            = useState([]);
+    const [modal , setModal]                    = useState(false);
+    const [activeItem, setActiveItem]           = useState({ comment: "" });
+    const [username, setUsername]               = useState('');
+    const [password, setPassword]               = useState('');
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isLoading, setIsLoading]             = useState(true);
 
     // Stateに username とpassword、isAuthenticated を追加しておく。
-    constructor(props) {
-        super(props);
-        this.state = {
-            topicList: [],
-            modal: false,
-            activeItem: {
-                comment: "",
-            },
-            username: '',
-            password: '',
-            isAuthenticated: false,
-        };
+    useEffect(() => {
+        refreshList();
+    }, []);
 
-        this.api = axios.create({ baseURL: '/api/', });
+    const refreshList = async () => {
+        const accessToken = localStorage.getItem('access_token');
+        if (!accessToken){ return false; }
 
-    }
+        try{
+            const response = await axios.get("/api/topics/",{ headers: { Authorization: `Bearer ${accessToken}` } })
 
-
-    componentDidMount() {
-        if (localStorage.getItem('access_token')) {
-            this.setState({ isAuthenticated: true }, this.refreshList);
+            setTopicList(response.data);
+            setIsAuthenticated(true);
+            setIsLoading(false);
         }
-    }
+        catch(error){
+            console.log(error);
+        }
+    };
 
-    login = async (username, password) => {
+    const login = async () => {
         try {
             const response = await axios.post('/api/token/', {
                 username,
@@ -43,119 +42,90 @@ class App extends Component {
             });
             const { access, refresh } = response.data;
 
-            //console.log(response.data);
-
             localStorage.setItem('access_token', access);
             localStorage.setItem('refresh_token', refresh);
 
             console.log("認証に成功しました。");
+            setIsAuthenticated(true);
+            refreshList();
                 
-            return true;
         } catch (error) {
-
             console.log("認証に失敗しました。");
-
             console.error('Login failed:', error);
-            return false;
         }
     }
-
-    handleLoginSubmit = async (event) => {
-        event.preventDefault();
-        const { username, password }    = this.state;
-        const success                   = await this.login(username, password);
-
-        if (success) {
-            console.log("認証に成功したので、ページをロードします。");
-            this.setState({ isAuthenticated: true }, this.refreshList);
-        } else {
-            console.log('Login failed');
-        }
-    }
-
-    handleLogout = () => {
+    const logout = () => {
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        this.setState({ isAuthenticated: false, topicList: [] });
-        // 任意の追加のクリーンアップ処理をここに追加することもできます
-    };
-
-
-
-    /*
-    login = async () => {
-        const { username, password } = this.state;
-        const success = await this.login(username, password);
-        if (success) {
-            this.setState({ isAuthenticated: true }, this.refreshList);
-        } else {
-            console.log('Login failed');
-        }
-    }
-    */
-
-    handleChange = (event) => {
-        this.setState({ [event.target.name]: event.target.value });
+        setIsAuthenticated(false);
     }
 
-    refreshList = () => {
+    // usernameとpasswordのstateの変更
+    const handleChange = (setter) => (event) => {
+        setter(event.target.value);
+    }
+
+    const handleSubmit = async () => {
 
         const accessToken = localStorage.getItem('access_token');
-
-        console.log(accessToken);
-        console.log("ロードします");
-        this.api.get("/topics/",{ headers: { Authorization: `Bearer ${accessToken}` } })
-            .then((res) => this.setState({ topicList: res.data }))
-            .catch((err) => {
-                console.log("==================");
-                //console.log(err);
-                console.log(err.response);
-                console.log("==================");
-            });
-    };
-
-    handleSubmit = (item) => {
-
-        const accessToken = localStorage.getItem('access_token');
-
-        if (item.id) {
-            this.api.put(`/topics/${item.id}/`, item, { headers: { Authorization: `Bearer ${accessToken}` } })
-                .then((res) => {
-                    this.refreshList();
-                })
-                .catch((err) => console.log(err));
+        if (activeItem.id) {
+            try {
+                const response = await axios.put(`/api/topics/${activeItem.id}/`,
+                                        activeItem,
+                                        { headers: { Authorization: `Bearer ${accessToken}` }})
+                refreshList();
+            }
+            catch (error){
+                console.log(error);
+            }
+            
         } else {
-            this.api.post("/topics/", item, { headers: { Authorization: `Bearer ${accessToken}` } })
-                .then((res) => {
-                    this.refreshList();
-                })
-                .catch((err) => console.log(err));
+            try {
+                const response = await axios.post("/api/topics/",
+                                        activeItem,
+                                        { headers: { Authorization: `Bearer ${accessToken}` } })
+
+                refreshList();
+            }
+            catch (error){
+                console.log(error);
+            }
         }
 
-        this.closeModal();
+        closeModal();
     };
 
-    handleDelete = (item) => {
-
+    const handleDelete = async (item) => {
         const accessToken = localStorage.getItem('access_token');
 
-        this.api.delete(`/topics/${item.id}/`,{ headers: { Authorization: `Bearer ${accessToken}` } } )
-            .then((res) => this.refreshList());
-    };
-
-    openModal = (item) => {
-        if (item.id) {
-            this.setState({ activeItem: item, modal: true });
-        } else {
-            this.setState({ activeItem: { comment: "" }, modal: true });
+        try {
+            const response = await axios.delete(`/api/topics/${item.id}/`,{ headers: { Authorization: `Bearer ${accessToken}` } } )
+            refreshList();
         }
+        catch (error){
+            console.log(error);
+        }
+
     };
 
-    closeModal = () => {
-        this.setState({ activeItem: { comment: "" }, modal: false });
+    const openModal = (item) => {
+
+        // 編集の場合はidも含める
+        if (item.id) {
+            setActiveItem(item);
+        } else {
+            setActiveItem({ comment: "" });
+        }
+        
+        setModal(true);
     };
 
-    linebreaksbr = (string) => {
+    const closeModal = () => {
+        setActiveItem({ comment: "" });
+        setModal(false);
+    };
+
+    const linebreaksbr = (string) => {
         return string.split('\n').map((item, index) => (
             <React.Fragment key={index}>
             {item}
@@ -164,244 +134,72 @@ class App extends Component {
         ));
     };
 
-    renderItems = () => {
-        return this.state.topicList.map((item) => (
+
+
+    const renderItems = () => {
+        return topicList.map((item) => (
             <div className="border" key={item.id}>
             <div>{item.id}</div>
-            <div>{this.linebreaksbr(item.comment)}</div>
+            <div>{linebreaksbr(item.comment)}</div>
             <div className="text-end">
-            <input type="button" className="mx-1 btn btn-success" value="編集" onClick={() => this.openModal(item)} />
-            <input type="button" className="mx-1 btn btn-danger" value="削除" onClick={() => this.handleDelete(item)} />
+            <input type="button" className="mx-1 btn btn-success" value="編集" onClick={() => openModal(item)} />
+            <input type="button" className="mx-1 btn btn-danger" value="削除" onClick={() => handleDelete(item)} />
             </div>
             </div>
         ));
     };
 
-    render() {
-        if (!this.state.isAuthenticated) {
-            return (
-                <div>
-                    <h2>Login</h2>
-                    <form onSubmit={this.handleLoginSubmit}>
-                        <input
-                            type="text"
-                            name="username"
-                            value={this.state.username}
-                            onChange={this.handleChange}
-                            placeholder="Username"
-                        />
-                        <input
-                            type="password"
-                            name="password"
-                            value={this.state.password}
-                            onChange={this.handleChange}
-                            placeholder="Password"
-                        />
-                        <button type="submit">Login</button>
-                    </form>
-                </div>
-
-            );
-        }
-
+    if (isLoading){
         return (
-            <>
+            <div>Now Loading...</div>
+        )
+    }
+
+
+    if (!isAuthenticated) {
+        return (
+            <div>
+                <input
+                    type="text"
+                    name="username"
+                    value={username}
+                    onChange={handleChange(setUsername)}
+                    placeholder="Username"
+                />
+                <input
+                    type="password"
+                    name="password"
+                    value={password}
+                    onChange={handleChange(setPassword)}
+                    placeholder="Password"
+                />
+                <input type="button" value="ログイン" onClick={login} />
+            </div>
+        );
+    }
+    return (
+        <>
             <h1 className="bg-primary text-white text-center">簡易掲示板</h1>
             <main className="container">
-
-                {this.state.isAuthenticated ? (
-                  <button onClick={this.handleLogout}>ログアウト</button>
+                {isAuthenticated ? (
+                    <input className="btn btn-danger" type="button" onClick={logout} value="ログアウト" />
                 ) : (
-                  <div>ログアウトしました</div>
+                    <div>ログアウトしました</div>
                 )}
-
-                <input className="btn btn-primary" type="button" onClick={() => this.openModal(this.state.activeItem)} value="新規作成" />
-                {this.state.modal ? (
+                <input className="btn btn-primary" type="button" onClick={() => openModal(activeItem)} value="新規作成" />
+                {modal ? (
                     <Modal
-                    activeItem={this.state.activeItem}
-                    handleSubmit={this.handleSubmit}
-                    closeModal={this.closeModal}
+                    activeItem={activeItem}
+                    setActiveItem={setActiveItem}
+                    handleSubmit={handleSubmit}
+                    closeModal={closeModal}
                     />
-                ) : null}
-                {this.renderItems()}
-
-
-
+                ) : null }
+                {renderItems()}
             </main>
-            </>
-        );
-    }
-}
-
-export default App;
-
-
-
-/*
-
-// リクエスト送信用のaxiosとモーダルをimport
-class App extends Component {
-
-    // Stateの設計からやり直す。
-    constructor(props) {
-        super(props);
-        this.state = {
-            topicList: [],
-            modal: false,
-            activeItem: {
-                comment: "",
-            },
-        };
-    }
-    componentDidMount() {
-        this.refreshList();
-    }
-
-    refreshList     = () => {
-        axios
-            .get("/api/topics/")
-            .then((res) => this.setState({ topicList: res.data }))
-            .catch((err) => console.log(err));
-    };
-
-
-    // ログインの処理を行う関数 (ログイン後、ローカルストレージに記録をする)
-    login = async (username, password) => {
-        try {
-            const response = await axios.post('/api/token/', {
-                username: username,
-                password: password,
-            });
-            const { access, refresh } = response.data;
-            localStorage.setItem('access_token', access);
-            localStorage.setItem('refresh_token', refresh);
-            return true;
-        } catch (error) {
-            console.error('Login failed:', error);
-            return false;
-        }
-    };
-
-
-    // 認証済みのリクエストの作成
-    api = axios.create({ baseURL: '/api/' });
-    api.interceptors.request.use(
-        (config) => {
-            const accessToken = localStorage.getItem('access_token');
-            if (accessToken) {
-                config.headers.Authorization = `Bearer ${accessToken}`;
-            }
-            return config;
-        },
-        (error) => {
-            return Promise.reject(error);
-        }
+        </>
     );
-
-
-
-
-
-    // 保護されたエンドポイントへのリクエスト 
-    export default api;
-    const fetchProtectedData = async () => {
-        try {
-            // 任意のURLへリクエストを送る。
-            const response = await api.get('/protected-endpoint/');
-            console.log(response.data);
-        } catch (error) {
-            console.error('Failed to fetch protected data:', error);
-        }
-    };
-
-
-
-    // モーダルダイアログを表示させ、idがあれば編集処理のダイアログを、なければ新規作成のダイアログを表示させる
-    handleSubmit    = (item) => {
-
-        if (item.id){
-            axios
-                .put(`/api/topics/${item.id}/`, item)
-                .then((res) => {
-                    this.refreshList();
-                })
-                .catch((err) => console.log(err));
-        }
-        else{
-            axios
-                .post("/api/topics/", item)
-                .then((res) => {
-                    this.refreshList();
-                })
-                .catch((err) => console.log(err));
-        }
-
-        this.closeModal();
-    };
-
-    handleDelete    = (item) => {
-        axios
-            .delete(`/api/topics/${item.id}/`)
-            .then((res) => this.refreshList());
-    };
-
-
-    openModal       = (item) => {
-        // 編集時はコメントをセット
-        if (item.id){
-            this.setState({ activeItem: item, modal: true });
-        }
-        else{
-            this.setState({ activeItem: { comment:"" }, modal: true });
-        }
-    };
-    closeModal      = () => {
-        this.setState({ activeItem: { comment:"" }, modal: false });
-    };
-
-
-    // 改行をする
-    linebreaksbr    = (string) => {
-
-        // React.Fragment は <></> と同じであるが、今回はkeyを指定する必要があるため、React.Fragmentとする 
-        return string.split('\n').map((item, index) => (
-            <React.Fragment key={index}>
-                {item}
-                {index !== string.split('\n').length - 1 && <br />}
-            </React.Fragment>
-        )); 
-    };
-
-    renderItems     = () => {
-        return this.state.topicList.map((item) => (
-            <div className="border" key={item.id}>
-                <div>{item.id}</div>
-                <div>{ this.linebreaksbr(item.comment) }</div>
-                <div className="text-end">
-                    <input type="button" className="mx-1 btn btn-success" value="編集" onClick={ () => this.openModal(item) } />
-                    <input type="button" className="mx-1 btn btn-danger" value="削除" onClick={ () => this.handleDelete(item) } />
-                </div>
-            </div>
-        ));
-    };
-    render() {
-        return (
-            <>
-                <h1 className="bg-primary text-white text-center">簡易掲示板</h1>
-                <main className="container">
-
-                    <input className="btn btn-primary" type="button" onClick={ () => this.openModal(this.state.activeItem) } value="新規作成" />
-                    { this.state.modal ? ( <Modal activeItem    = {this.state.activeItem}
-                                                  handleSubmit  = {this.handleSubmit}
-                                                  closeModal    = {this.closeModal} /> ): null }
-                    { this.renderItems() }
-
-                </main>
-            </>
-        );
-    };
 }
 
 export default App;
-*/
 
